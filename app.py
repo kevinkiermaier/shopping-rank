@@ -149,9 +149,11 @@ def search_naver(keyword, display=100):
         return results, None
 
     except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 401:
-            return [], "API 키가 올바르지 않습니다. Railway 환경변수에서 NAVER_CLIENT_ID와 NAVER_CLIENT_SECRET을 확인하세요."
-        return [], f"API 오류: {str(e)}"
+        status = e.response.status_code
+        body = e.response.text[:200]
+        id_loaded = "있음" if NAVER_CLIENT_ID else "없음(빈값)"
+        secret_loaded = "있음" if NAVER_CLIENT_SECRET else "없음(빈값)"
+        return [], f"HTTP {status} 오류 | ID환경변수:{id_loaded} | SECRET환경변수:{secret_loaded} | 응답:{body}"
     except Exception as e:
         return [], f"오류 발생: {str(e)}"
 
