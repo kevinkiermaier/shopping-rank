@@ -2,11 +2,14 @@ from flask import Flask, render_template, request, jsonify
 import requests
 import re
 import os
+from dotenv import load_dotenv
+
+load_dotenv()  # 로컬 .env 파일 자동 로드
 
 app = Flask(__name__)
 
 # API 키는 환경변수에서 읽음 (GitHub에 절대 직접 입력 X)
-# 로컬: .env 파일 또는 터미널에서 설정
+# 로컬: .env 파일에 입력
 # Railway: 대시보드 Variables에서 설정
 NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "")
 NAVER_CLIENT_SECRET = os.environ.get("NAVER_CLIENT_SECRET", "")
