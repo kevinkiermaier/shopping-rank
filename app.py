@@ -163,6 +163,18 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/debug-env")
+def debug_env():
+    import os
+    client_id = os.environ.get("NAVER_CLIENT_ID", "")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET", "")
+    return jsonify({
+        "NAVER_CLIENT_ID": client_id[:4] + "****" if client_id else "비어있음",
+        "NAVER_CLIENT_SECRET": client_secret[:4] + "****" if client_secret else "비어있음",
+        "all_env_keys": [k for k in os.environ.keys() if "NAVER" in k]
+    })
+
+
 @app.route("/search", methods=["POST"])
 def search():
     data = request.json
