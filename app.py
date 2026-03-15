@@ -40,6 +40,22 @@ def format_date(val):
     return str(val)
 
 
+def estimate_sales(review):
+    """리뷰수 기반 판매량 추정 (리뷰 작성률 약 2~5% 가정)"""
+    if review <= 0:
+        return "-", "-"
+    total_est = review * 25  # 리뷰 작성률 ~4% 가정
+    sales_7d = max(1, round(total_est / 78))   # 약 18개월 판매 기준 주간 환산
+    sales_6m = max(1, round(total_est / 3))    # 6개월치
+    # 보기 좋게 반올림
+    def rnd(n):
+        if n >= 10000: return f"~{round(n/1000)*1000:,}"
+        if n >= 1000:  return f"~{round(n/100)*100:,}"
+        if n >= 100:   return f"~{round(n/10)*10:,}"
+        return f"~{n:,}"
+    return rnd(sales_7d), rnd(sales_6m)
+
+
 def calc_score(rank, review, purchase_cnt=0):
     # 리뷰 점수
     if review >= 10000:
@@ -257,6 +273,7 @@ def search_naver_api(keyword, display=100):
         review = int(item.get("reviewCount") or 0)
         scores = calc_score(i, review)
         price = int(item.get("lprice") or 0)
+        sales_7d, sales_6m = estimate_sales(review)
         category = " > ".join(filter(None, [
             item.get("category1", ""),
             item.get("category2", ""),
@@ -269,8 +286,8 @@ def search_naver_api(keyword, display=100):
             "title": clean_html(item.get("title", "")),
             "link": item.get("link", ""),
             "mall": item.get("mallName", ""),
-            "sales_7d": "-",
-            "sales_6m": "-",
+            "sales_7d": sales_7d,
+            "sales_6m": sales_6m,
             "price": f"{price:,}",
             "category": category,
             "reg_date": "-",
