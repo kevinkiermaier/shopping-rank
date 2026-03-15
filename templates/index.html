@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>쇼핑 키워드 분석</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .search-bar { background: #343a40; padding: 12px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .search-bar input { flex: 1; min-width: 200px; max-width: 400px; }
+    .platform-tabs .nav-link { color: #495057; font-weight: 600; }
+    .platform-tabs .nav-link.active { color: #007bff; border-bottom: 3px solid #007bff; }
+    .limit-badge { font-size: 12px; color: #adb5bd; }
+    .score-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+    .score-5 { color: #28a745; font-weight: 700; }
+    .score-4 { color: #17a2b8; font-weight: 700; }
+    .score-3 { color: #ffc107; font-weight: 700; }
+    .score-2 { color: #fd7e14; font-weight: 700; }
+    .score-1 { color: #dc3545; font-weight: 700; }
+    .grade-good { background: #28a745; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+    .product-img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
+    .product-title { font-size: 13px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .product-title a { color: #343a40; }
+    .product-title a:hover { color: #007bff; }
+    .rank-num { font-weight: 700; font-size: 16px; color: #495057; }
+    .rank-1 { color: #f39c12; }
+    .rank-2 { color: #6c757d; }
+    .rank-3 { color: #cd7f32; }
+    #result-table th { font-size: 11px; white-space: nowrap; text-align: center; vertical-align: middle; }
+    #result-table td { font-size: 12px; text-align: center; vertical-align: middle; }
+    .loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 9999; justify-content: center; align-items: center; }
+    .loading-overlay.show { display: flex; }
+    .expiry-badge { font-size: 12px; color: #ffc107; }
+    .table-responsive { overflow-x: auto; }
+    .header-top { display: flex; align-items: center; gap: 16px; padding: 6px 20px; background: #2d3748; color: white; font-size: 13px; }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini layout-fixed" style="background:#f4f6f9;">
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="text-center text-white">
+    <div class="spinner-border text-light mb-3" style="width:3rem;height:3rem;"></div>
+    <div style="font-size:18px;">검색 중...</div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <!-- Header -->
+  <nav class="main-header navbar navbar-expand navbar-dark navbar-dark" style="background:#1a202c;">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
+      </li>
+      <li class="nav-item d-flex align-items-center ms-2">
+        <i class="fas fa-shopping-cart me-2 text-warning"></i>
+        <span class="font-weight-bold text-white">쇼핑검색 키워드 분석</span>
+      </li>
+    </ul>
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item d-flex align-items-center me-3">
+        <span class="expiry-badge"><i class="fas fa-clock me-1"></i>만료일 : 2026-12-31</span>
+      </li>
+      <li class="nav-item d-flex align-items-center me-3">
+        <span class="limit-badge text-white">네이버 : <span id="naver-count">0</span>/100</span>
+        <span class="limit-badge text-white ms-3">쿠팡 : <span id="coupang-count">0</span>/0</span>
+      </li>
+      <li class="nav-item">
+        <a href="#" class="nav-link text-white"><i class="fas fa-sign-out-alt"></i> 로그아웃</a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Sidebar -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4" style="background:#1a202c;">
+    <a href="/" class="brand-link" style="background:#1a202c;">
+      <i class="fas fa-shopping-bag brand-image text-warning" style="font-size:20px;"></i>
+      <span class="brand-text font-weight-bold">쇼핑 분석툴</span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview">
+          <li class="nav-item">
+            <a href="/" class="nav-link active" style="background:#007bff;">
+              <i class="nav-icon fas fa-search"></i>
+              <p>키워드 검색</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="content-wrapper" style="min-height:100vh;">
+
+    <!-- Search Bar -->
+    <div class="search-bar">
+      <div class="platform-tabs nav" id="platformTabs">
+        <a class="nav-link active px-3 py-2 text-white" href="#" data-platform="naver" style="border-bottom: 3px solid #007bff;">
+          <i class="fas fa-store me-1"></i> 네이버 쇼핑
+        </a>
+        <a class="nav-link px-3 py-2 text-secondary" href="#" data-platform="coupang">
+          <i class="fas fa-rocket me-1"></i> 쿠팡
+        </a>
+      </div>
+      <input type="text" id="keywordInput" class="form-control" placeholder="키워드 입력 (예: 현수막, 에어팟, 운동화)" style="max-width:360px;">
+      <button class="btn btn-primary px-4" id="searchBtn">
+        <i class="fas fa-search me-1"></i> 검색
+      </button>
+      <span id="resultCount" class="text-white text-sm"></span>
+    </div>
+
+    <!-- Error Alert -->
+    <div id="errorAlert" class="alert alert-danger mx-3 mt-3" style="display:none;"></div>
+
+    <!-- Table -->
+    <div class="content p-3">
+      <div class="card card-outline card-primary">
+        <div class="card-header d-flex align-items-center">
+          <h3 class="card-title"><i class="fas fa-list me-2 text-primary"></i>검색 결과</h3>
+          <span class="badge badge-primary ml-2" id="totalBadge"></span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover table-bordered mb-0" id="result-table">
+              <thead class="thead-dark">
+                <tr>
+                  <th>#</th>
+                  <th>이미지</th>
+                  <th style="min-width:200px;">상품명</th>
+                  <th>업체명</th>
+                  <th>7일<br>판매량</th>
+                  <th>6개월<br>판매량</th>
+                  <th>가격</th>
+                  <th style="min-width:150px;">카테고리</th>
+                  <th>등록일시</th>
+                  <th>종합<br>점수</th>
+                  <th>찜</th>
+                  <th>리뷰</th>
+                  <th>클릭<br>점수</th>
+                  <th>판매<br>점수</th>
+                  <th>리뷰<br>점수</th>
+                  <th>인기도<br>종합점수</th>
+                  <th>최신성</th>
+                  <th>페널티</th>
+                  <th>검색어<br>적합도</th>
+                  <th>신뢰성</th>
+                  <th>등급</th>
+                </tr>
+              </thead>
+              <tbody id="resultBody">
+                <tr>
+                  <td colspan="21" class="text-center text-muted py-5">
+                    <i class="fas fa-search fa-2x mb-3 d-block"></i>
+                    키워드를 입력하고 검색하세요
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="main-footer text-sm">
+    <strong>쇼핑 키워드 분석툴</strong> &copy; 2026
+    <div class="float-right text-muted">네이버 쇼핑 API 기반</div>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+<script>
+let currentPlatform = 'naver';
+let naverCount = 0;
+
+// 플랫폼 탭 전환
+$('#platformTabs .nav-link').click(function(e) {
+  e.preventDefault();
+  $('#platformTabs .nav-link').removeClass('active text-white').addClass('text-secondary').css('border-bottom', 'none');
+  $(this).addClass('active text-white').removeClass('text-secondary').css('border-bottom', '3px solid #007bff');
+  currentPlatform = $(this).data('platform');
+});
+
+// 엔터 검색
+$('#keywordInput').keypress(function(e) {
+  if (e.which === 13) doSearch();
+});
+
+$('#searchBtn').click(doSearch);
+
+function doSearch() {
+  const keyword = $('#keywordInput').val().trim();
+  if (!keyword) {
+    alert('키워드를 입력하세요.');
+    return;
+  }
+
+  $('#loadingOverlay').addClass('show');
+  $('#errorAlert').hide();
+  $('#resultBody').html('<tr><td colspan="21" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>');
+  $('#totalBadge').text('');
+  $('#resultCount').text('');
+
+  $.ajax({
+    url: '/search',
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ keyword: keyword, platform: currentPlatform }),
+    success: function(res) {
+      $('#loadingOverlay').removeClass('show');
+      if (res.error) {
+        $('#errorAlert').text('⚠️ ' + res.error).show();
+        $('#resultBody').html('<tr><td colspan="21" class="text-center text-muted py-4">결과 없음</td></tr>');
+        return;
+      }
+      if (currentPlatform === 'naver') {
+        naverCount++;
+        $('#naver-count').text(naverCount);
+      }
+      renderTable(res.results);
+      $('#totalBadge').text(res.total + '개');
+      $('#resultCount').text(keyword + ' — ' + res.total + '개 결과');
+    },
+    error: function() {
+      $('#loadingOverlay').removeClass('show');
+      $('#errorAlert').text('서버 오류가 발생했습니다.').show();
+    }
+  });
+}
+
+function scoreColor(score) {
+  const colors = { 5: 'score-5', 4: 'score-4', 3: 'score-3', 2: 'score-2', 1: 'score-1' };
+  return colors[score] || '';
+}
+
+function renderTable(items) {
+  if (!items || items.length === 0) {
+    $('#resultBody').html('<tr><td colspan="21" class="text-center text-muted py-4">검색 결과가 없습니다.</td></tr>');
+    return;
+  }
+
+  let html = '';
+  items.forEach(function(item) {
+    const rankClass = item.rank <= 3 ? 'rank-' + item.rank : '';
+    const imgHtml = item.image
+      ? `<a href="${item.link}" target="_blank"><img src="${item.image}" class="product-img" onerror="this.src='https://via.placeholder.com/48'"></a>`
+      : '<div style="width:48px;height:48px;background:#eee;border-radius:6px;"></div>';
+
+    html += `<tr>
+      <td><span class="rank-num ${rankClass}">${item.rank}</span></td>
+      <td>${imgHtml}</td>
+      <td class="text-left">
+        <div class="product-title">
+          <a href="${item.link}" target="_blank" title="${item.title}">${item.title}</a>
+        </div>
+      </td>
+      <td><small>${item.mall}</small></td>
+      <td>${item.sales_7d}</td>
+      <td>${item.sales_6m}</td>
+      <td><strong>${item.price}원</strong></td>
+      <td><small class="text-muted">${item.category}</small></td>
+      <td><small>${item.reg_date}</small></td>
+      <td><span class="${scoreColor(item.total)}">${item.total}</span></td>
+      <td>${item.wish}</td>
+      <td>${item.review}</td>
+      <td><span class="${scoreColor(item.click_score)}">${item.click_score}</span></td>
+      <td><span class="${scoreColor(item.sales_score)}">${item.sales_score}</span></td>
+      <td><span class="${scoreColor(item.review_score)}">${item.review_score}</span></td>
+      <td><span class="${scoreColor(item.popularity)}">${item.popularity}</span></td>
+      <td>${item.recency}</td>
+      <td>${item.penalty}</td>
+      <td>${item.relevance}</td>
+      <td>${item.reliability}</td>
+      <td><span class="grade-good">${item.grade}</span></td>
+    </tr>`;
+  });
+
+  $('#resultBody').html(html);
+}
+</script>
+</body>
+</html>
