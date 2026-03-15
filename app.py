@@ -223,36 +223,41 @@ def parse_product(p, rank):
 
 def search_naver_scrape(keyword, display=40):
     """네이버 쇼핑 HTML 스크래핑 (등록일시·판매량 포함)"""
-    url = "https://search.shopping.naver.com/search/all"
-    params = {"query": keyword, "sort": "rel", "pagingIndex": 1, "pagingSize": 40}
-
-    res = requests.get(url, headers=SCRAPE_HEADERS, params=params, timeout=15)
-    res.raise_for_status()
-
-    match = re.search(
-        r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
-        res.text,
-        re.DOTALL,
-    )
-    if not match:
-        return None, "스크래핑 실패: __NEXT_DATA__ 없음 (Naver 구조 변경 가능성)"
-
-    next_data = json.loads(match.group(1))
-
     try:
-        state = next_data["props"]["pageProps"]["initialState"]
-    except (KeyError, TypeError):
-        return None, "initialState 없음"
+        url = "https://search.shopping.naver.com/search/all"
+        params = {"query": keyword, "sort": "rel", "pagingIndex": 1, "pagingSize": 40}
 
-    products = extract_products_from_state(state)
-    if not products:
-        return None, "상품 목록 파싱 실패"
+        res = requests.get(url, headers=SCRAPE_HEADERS, params=params, timeout=15)
+        if res.status_code != 200:
+            return None, f"Naver 스크래핑 차단 (HTTP {res.status_code})"
 
-    results = []
-    for i, p in enumerate(products[:display], 1):
-        results.append(parse_product(p, i))
+        match = re.search(
+            r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+            res.text,
+            re.DOTALL,
+        )
+        if not match:
+            return None, "스크래핑 실패: __NEXT_DATA__ 없음"
 
-    return results, None
+        next_data = json.loads(match.group(1))
+
+        try:
+            state = next_data["props"]["pageProps"]["initialState"]
+        except (KeyError, TypeError):
+            return None, "initialState 없음"
+
+        products = extract_products_from_state(state)
+        if not products:
+            return None, "상품 목록 파싱 실패"
+
+        results = []
+        for i, p in enumerate(products[:display], 1):
+            results.append(parse_product(p, i))
+
+        return results, None
+
+    except Exception as e:
+        return None, f"스크래핑 오류: {str(e)}"
 
 
 def search_naver_api(keyword, display=100):
