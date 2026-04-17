@@ -216,20 +216,22 @@ def parse_product(p, rank):
 
     scores = calc_score(rank, review, purchase)
 
+    revenue = price * purchase
+
     return {
         "rank": rank,
         "image": image,
         "title": title,
         "link": link,
         "mall": mall,
-        "sales_7d": f"{purchase:,}" if purchase > 0 else "-",
-        "sales_6m": "-",
-        "price": f"{price:,}",
+        "price": price,
+        "sales_count": purchase,
+        "revenue": revenue,
+        "review": review,
+        "wish": int(wish) if wish else 0,
         "category": category,
         "reg_date": reg_date,
         "total": scores["total"],
-        "wish": f"{int(wish):,}" if wish and int(wish) > 0 else "-",
-        "review": f"{review:,}" if review > 0 else "-",
         "click_score": scores["click_score"],
         "sales_score": scores["sales_score"],
         "review_score": scores["review_score"],
@@ -299,7 +301,6 @@ def search_naver_api(keyword, display=100):
         review = int(item.get("reviewCount") or 0)
         scores = calc_score(i, review)
         price = int(item.get("lprice") or 0)
-        sales_7d, sales_6m = estimate_sales(review)
         category = " > ".join(filter(None, [
             item.get("category1", ""),
             item.get("category2", ""),
@@ -312,14 +313,14 @@ def search_naver_api(keyword, display=100):
             "title": clean_html(item.get("title", "")),
             "link": item.get("link", ""),
             "mall": item.get("mallName", ""),
-            "sales_7d": sales_7d,
-            "sales_6m": sales_6m,
-            "price": f"{price:,}",
+            "price": price,
+            "sales_count": 0,
+            "revenue": 0,
+            "review": review,
+            "wish": 0,
             "category": category,
             "reg_date": "-",
             "total": scores["total"],
-            "wish": "-",
-            "review": f"{review:,}" if review else "-",
             "click_score": scores["click_score"],
             "sales_score": scores["sales_score"],
             "review_score": scores["review_score"],
