@@ -128,41 +128,34 @@
     <!-- Table -->
     <div class="content p-3">
       <div class="card card-outline card-primary">
-        <div class="card-header d-flex align-items-center">
-          <h3 class="card-title"><i class="fas fa-list me-2 text-primary"></i>검색 결과</h3>
-          <span class="badge badge-primary ml-2" id="totalBadge"></span>
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center gap-2">
+            <h3 class="card-title mb-0"><i class="fas fa-list me-2 text-primary"></i>검색 결과</h3>
+            <span class="badge badge-primary ml-2" id="totalBadge"></span>
+            <small id="scrapedAt" style="color:#adb5bd;font-size:11px;margin-left:8px;"></small>
+          </div>
+          <button class="btn btn-success btn-sm" id="excelBtn" onclick="downloadExcel()" style="display:none;">
+            <i class="fas fa-file-excel me-1"></i> 엑셀파일다운로드
+          </button>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive">
             <table class="table table-sm table-hover table-bordered mb-0" id="result-table">
               <thead class="thead-dark">
                 <tr>
-                  <th>#</th>
-                  <th>이미지</th>
-                  <th style="min-width:200px;">상품명</th>
-                  <th>업체명</th>
-                  <th title="리뷰수 기반 추정값">7일<br>판매량<br><span style="font-size:9px;color:#ffc107;font-weight:400;">(추정)</span></th>
-                  <th title="리뷰수 기반 추정값">6개월<br>판매량<br><span style="font-size:9px;color:#ffc107;font-weight:400;">(추정)</span></th>
-                  <th>가격</th>
-                  <th style="min-width:150px;">카테고리</th>
-                  <th>등록일시</th>
-                  <th>종합<br>점수</th>
-                  <th>찜</th>
-                  <th>리뷰</th>
-                  <th>클릭<br>점수</th>
-                  <th>판매<br>점수</th>
-                  <th>리뷰<br>점수</th>
-                  <th>인기도<br>종합점수</th>
-                  <th>최신성</th>
-                  <th>페널티</th>
-                  <th>검색어<br>적합도</th>
-                  <th>신뢰성</th>
-                  <th>등급</th>
+                  <th style="width:40px;text-align:center">#</th>
+                  <th style="min-width:280px;">상품명</th>
+                  <th style="min-width:180px;">카테고리</th>
+                  <th style="width:90px;text-align:right">판매가</th>
+                  <th style="width:110px;text-align:right">매출</th>
+                  <th style="width:90px;text-align:right">판매건수</th>
+                  <th style="width:90px;text-align:right">유입수</th>
+                  <th style="width:80px;text-align:right">리뷰수</th>
                 </tr>
               </thead>
               <tbody id="resultBody">
                 <tr>
-                  <td colspan="21" class="text-center text-muted py-5">
+                  <td colspan="8" class="text-center text-muted py-5">
                     <i class="fas fa-search fa-2x mb-3 d-block"></i>
                     키워드를 입력하고 검색하세요
                   </td>
@@ -236,15 +229,15 @@ function doSearch() {
         naverCount++;
         $('#naver-count').text(naverCount);
       }
-      renderTable(res.results);
+      currentKeyword = keyword;
+      renderTable(res.results, false);
       $('#totalBadge').text(res.total + '개');
       $('#resultCount').text(keyword + ' — ' + res.total + '개 결과');
-      // 확장프로그램 수집 링크 표시 + 폴링 시작
-      currentKeyword = keyword;
+      $('#excelBtn').show();
       const naverUrl = 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(keyword) + '&sort=rel';
       $('#naverShoppingLink').attr('href', naverUrl);
       $('#naverLinkBar').css('display', 'flex');
-      $('#collectStatus').text('확장프로그램 설치 시 자동 수집됩니다...');
+      $('#collectStatus').text('확장프로그램이 자동으로 실제 데이터를 수집합니다...');
       startPolling();
     },
     error: function() {
@@ -268,8 +261,10 @@ function startPolling() {
         // 키워드가 현재 검색어와 일치하면 업데이트
         if (kw === currentKeyword || kw.includes(currentKeyword) || currentKeyword.includes(kw)) {
           lastExtId = data.session.id;
-          updateTableWithExtData(data.products);
-          $('#collectStatus').text('✓ 리뷰 데이터 수집 완료! 판매량 추정 업데이트됨').css('color','#28a745');
+          renderTable(data.products, true);
+          $('#totalBadge').text(data.products.length + '개');
+          $('#scrapedAt').text('데이터 조회시간 : ' + (data.session.scraped_at || '').replace('T',' ').slice(0,19));
+          $('#collectStatus').text('✓ 실제 데이터 수집 완료').css('color','#28a745');
           clearInterval(pollTimer);
         }
       }
@@ -278,89 +273,87 @@ function startPolling() {
   }, 2000);
 }
 
-function estimateFromReview(review) {
-  if (!review || review <= 0) return null;
-  const total = review * 25;
-  const s7 = Math.max(1, Math.round(total / 78));
-  const s6m = Math.max(1, Math.round(total / 3));
-  function rnd(n) {
-    if (n >= 10000) return '~' + (Math.round(n/1000)*1000).toLocaleString();
-    if (n >= 1000)  return '~' + (Math.round(n/100)*100).toLocaleString();
-    if (n >= 100)   return '~' + (Math.round(n/10)*10).toLocaleString();
-    return '~' + n.toLocaleString();
-  }
-  return { s7: rnd(s7), s6m: rnd(s6m) };
+
+let currentItems = [];
+
+function fmt(n) {
+  if (n == null || n === '' || n === '-' || n === 0) return '-';
+  if (typeof n === 'string') return n;
+  return parseInt(n).toLocaleString();
 }
 
-function updateTableWithExtData(extProducts) {
-  if (!extProducts || !extProducts.length) return;
-  const byRank = {};
-  extProducts.forEach(function(p) { if (p.rank) byRank[p.rank] = p; });
-
-  $('#resultBody tr').each(function(idx) {
-    const rank = idx + 1;
-    const ext = byRank[rank];
-    if (!ext) return;
-    const review = parseInt(ext.review) || 0;
-    const est = estimateFromReview(review);
-    const tds = $(this).find('td');
-    if (est) {
-      tds.eq(4).text(est.s7).css('color','#28a745').css('font-weight','700');
-      tds.eq(5).text(est.s6m).css('color','#17a2b8').css('font-weight','700');
-    }
-    if (review > 0) tds.eq(11).text(review.toLocaleString());
-    if (ext.wish > 0) tds.eq(10).text(ext.wish.toLocaleString());
-  });
-}
-
-function scoreColor(score) {
-  const colors = { 5: 'score-5', 4: 'score-4', 3: 'score-3', 2: 'score-2', 1: 'score-1' };
-  return colors[score] || '';
-}
-
-function renderTable(items) {
+function renderTable(items, fromExt) {
   if (!items || items.length === 0) {
-    $('#resultBody').html('<tr><td colspan="21" class="text-center text-muted py-4">검색 결과가 없습니다.</td></tr>');
+    $('#resultBody').html('<tr><td colspan="8" class="text-center text-muted py-4">검색 결과가 없습니다.</td></tr>');
     return;
   }
-
+  currentItems = items;
   let html = '';
+  let seq = 0;
   items.forEach(function(item) {
-    const rankClass = item.rank <= 3 ? 'rank-' + item.rank : '';
-    const imgHtml = item.image
-      ? `<a href="${item.link}" target="_blank"><img src="${item.image}" class="product-img" onerror="this.src='https://via.placeholder.com/48'"></a>`
-      : '<div style="width:48px;height:48px;background:#eee;border-radius:6px;"></div>';
+    const isAd = item.isAd || item.is_ad;
+    if (!isAd) seq++;
+    const rankLabel = isAd
+      ? '<span style="color:#d97706;font-size:10px;font-weight:700">AD</span>'
+      : `<span class="rank-num ${seq<=3?'rank-'+seq:''}">${seq}</span>`;
 
-    html += `<tr>
-      <td><span class="rank-num ${rankClass}">${item.rank}</span></td>
-      <td>${imgHtml}</td>
+    const title  = item.title || '';
+    const link   = item.url || item.link || '#';
+    const cat    = item.category || '';
+    const price  = item.price || 0;
+    const rev    = parseInt(item.review) || 0;
+    const sales  = parseInt(item.sales_count) || 0;
+    const revenue= parseInt(item.revenue) || (price * sales);
+    const traffic= parseInt(item.est_traffic || item.actual_traffic) || 0;
+
+    const salesStr   = sales   > 0 ? sales.toLocaleString()   : '-';
+    const revenueStr = revenue > 0 ? revenue.toLocaleString() : '-';
+    const trafficStr = traffic > 0 ? traffic.toLocaleString() : '-';
+    const revStr     = rev     > 0 ? rev.toLocaleString()     : '-';
+    const priceStr   = price   > 0 ? price.toLocaleString()   : '-';
+
+    html += `<tr data-rank="${seq}">
+      <td style="text-align:center">${rankLabel}</td>
       <td class="text-left">
-        <div class="product-title">
-          <a href="${item.link}" target="_blank" title="${item.title}">${item.title}</a>
-        </div>
+        <a href="${link}" target="_blank" style="color:#1a56db;font-size:13px;" title="${title}">${title}</a>
+        ${isAd ? '<span style="font-size:10px;color:#d97706;margin-left:4px">[광고]</span>' : ''}
       </td>
-      <td><small>${item.mall}</small></td>
-      <td>${item.sales_7d}</td>
-      <td>${item.sales_6m}</td>
-      <td><strong>${item.price}원</strong></td>
-      <td><small class="text-muted">${item.category}</small></td>
-      <td><small>${item.reg_date}</small></td>
-      <td><span class="${scoreColor(item.total)}">${item.total}</span></td>
-      <td>${item.wish}</td>
-      <td>${item.review}</td>
-      <td><span class="${scoreColor(item.click_score)}">${item.click_score}</span></td>
-      <td><span class="${scoreColor(item.sales_score)}">${item.sales_score}</span></td>
-      <td><span class="${scoreColor(item.review_score)}">${item.review_score}</span></td>
-      <td><span class="${scoreColor(item.popularity)}">${item.popularity}</span></td>
-      <td>${item.recency}</td>
-      <td>${item.penalty}</td>
-      <td>${item.relevance}</td>
-      <td>${item.reliability}</td>
-      <td><span class="grade-good">${item.grade}</span></td>
+      <td style="font-size:11px;color:#6b7280">${cat}</td>
+      <td style="text-align:right">${priceStr}</td>
+      <td style="text-align:right;font-weight:600">${revenueStr}</td>
+      <td style="text-align:right;font-weight:600;color:#1a56db">${salesStr}</td>
+      <td style="text-align:right">${trafficStr}</td>
+      <td style="text-align:right">${revStr}</td>
     </tr>`;
   });
-
   $('#resultBody').html(html);
+}
+
+function downloadExcel() {
+  if (!currentItems.length) return;
+  const headers = ['#','상품명','카테고리','판매가','매출','판매건수','유입수','리뷰수'];
+  let seq = 0;
+  const rows = currentItems.map(p => {
+    const isAd = p.isAd || p.is_ad;
+    if (!isAd) seq++;
+    const price = parseInt(p.price)||0, sales = parseInt(p.sales_count)||0;
+    return [
+      isAd ? 'AD' : seq,
+      p.title || '',
+      p.category || '',
+      price || '',
+      p.revenue || (price*sales) || '',
+      sales || '',
+      parseInt(p.est_traffic||p.actual_traffic)||'',
+      parseInt(p.review)||'',
+    ];
+  });
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (currentKeyword||'결과') + '_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
 }
 </script>
 </body>
