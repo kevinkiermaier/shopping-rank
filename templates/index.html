@@ -247,7 +247,22 @@ function doSearch() {
   });
 }
 
-// ── 확장프로그램 폴링 ────────────────────────────────────────────────────────
+// ── 확장프로그램 데이터 수신 (extension → webapp.js → postMessage) ───────────
+window.addEventListener('message', function(e) {
+  if (!e.data || e.data.type !== 'NSA_DATA') return;
+  const kw = (e.data.keyword || '').trim();
+  if (!currentKeyword) return;
+  if (kw === currentKeyword || kw.includes(currentKeyword) || currentKeyword.includes(kw)) {
+    if (pollTimer) clearInterval(pollTimer);
+    renderTable(e.data.products, true);
+    $('#totalBadge').text(e.data.products.length + '개');
+    $('#scrapedAt').text('데이터 조회시간 : ' + (e.data.saved_at || '').replace('T',' ').slice(0,19));
+    $('#collectStatus').text('✓ 실제 데이터 수집 완료').css('color','#28a745');
+    $('#excelBtn').show();
+  }
+});
+
+// ── 서버 폴링 (확장프로그램 미설치 또는 구버전 대비 폴백) ──────────────────
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer);
   let waited = 0;
@@ -258,7 +273,6 @@ function startPolling() {
       const data = await res.json();
       if (data.session && data.session.id !== lastExtId) {
         const kw = (data.session.keyword || '').trim();
-        // 키워드가 현재 검색어와 일치하면 업데이트
         if (kw === currentKeyword || kw.includes(currentKeyword) || currentKeyword.includes(kw)) {
           lastExtId = data.session.id;
           renderTable(data.products, true);
