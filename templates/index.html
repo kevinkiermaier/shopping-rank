@@ -112,6 +112,16 @@
       <span id="resultCount" class="text-white text-sm"></span>
     </div>
 
+    <!-- 확장프로그램 수집 안내 -->
+    <div id="naverLinkBar" style="display:none;background:#1a2a3a;padding:10px 20px;display:none;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span style="color:#adb5bd;font-size:13px;">📊 리뷰 데이터 수집 → 판매량 추정 활성화:</span>
+      <a id="naverShoppingLink" href="#" target="_blank"
+         style="background:#03c75a;color:#fff;padding:6px 16px;border-radius:6px;font-size:13px;font-weight:700;text-decoration:none;">
+        🛒 네이버 쇼핑에서 확인하기
+      </a>
+      <span id="collectStatus" style="color:#ffc107;font-size:12px;"></span>
+    </div>
+
     <!-- Error Alert -->
     <div id="errorAlert" class="alert alert-danger mx-3 mt-3" style="display:none;"></div>
 
@@ -178,6 +188,9 @@
 <script>
 let currentPlatform = 'naver';
 let naverCount = 0;
+let currentKeyword = '';
+let lastExtId = null;
+let pollTimer = null;
 
 // 플랫폼 탭 전환
 $('#platformTabs .nav-link').click(function(e) {
@@ -226,11 +239,77 @@ function doSearch() {
       renderTable(res.results);
       $('#totalBadge').text(res.total + '개');
       $('#resultCount').text(keyword + ' — ' + res.total + '개 결과');
+      // 확장프로그램 수집 링크 표시 + 폴링 시작
+      currentKeyword = keyword;
+      const naverUrl = 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(keyword) + '&sort=rel';
+      $('#naverShoppingLink').attr('href', naverUrl);
+      $('#naverLinkBar').css('display', 'flex');
+      $('#collectStatus').text('확장프로그램 설치 시 자동 수집됩니다...');
+      startPolling();
     },
     error: function() {
       $('#loadingOverlay').removeClass('show');
       $('#errorAlert').text('서버 오류가 발생했습니다.').show();
     }
+  });
+}
+
+// ── 확장프로그램 폴링 ────────────────────────────────────────────────────────
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  let waited = 0;
+  pollTimer = setInterval(async function() {
+    waited += 2;
+    try {
+      const res = await fetch('/api/analysis/latest');
+      const data = await res.json();
+      if (data.session && data.session.id !== lastExtId) {
+        const kw = (data.session.keyword || '').trim();
+        // 키워드가 현재 검색어와 일치하면 업데이트
+        if (kw === currentKeyword || kw.includes(currentKeyword) || currentKeyword.includes(kw)) {
+          lastExtId = data.session.id;
+          updateTableWithExtData(data.products);
+          $('#collectStatus').text('✓ 리뷰 데이터 수집 완료! 판매량 추정 업데이트됨').css('color','#28a745');
+          clearInterval(pollTimer);
+        }
+      }
+    } catch(e) {}
+    if (waited >= 60) clearInterval(pollTimer);
+  }, 2000);
+}
+
+function estimateFromReview(review) {
+  if (!review || review <= 0) return null;
+  const total = review * 25;
+  const s7 = Math.max(1, Math.round(total / 78));
+  const s6m = Math.max(1, Math.round(total / 3));
+  function rnd(n) {
+    if (n >= 10000) return '~' + (Math.round(n/1000)*1000).toLocaleString();
+    if (n >= 1000)  return '~' + (Math.round(n/100)*100).toLocaleString();
+    if (n >= 100)   return '~' + (Math.round(n/10)*10).toLocaleString();
+    return '~' + n.toLocaleString();
+  }
+  return { s7: rnd(s7), s6m: rnd(s6m) };
+}
+
+function updateTableWithExtData(extProducts) {
+  if (!extProducts || !extProducts.length) return;
+  const byRank = {};
+  extProducts.forEach(function(p) { if (p.rank) byRank[p.rank] = p; });
+
+  $('#resultBody tr').each(function(idx) {
+    const rank = idx + 1;
+    const ext = byRank[rank];
+    if (!ext) return;
+    const review = parseInt(ext.review) || 0;
+    const est = estimateFromReview(review);
+    const tds = $(this).find('td');
+    if (est) {
+      tds.eq(4).text(est.s7).css('color','#28a745').css('font-weight','700');
+      tds.eq(5).text(est.s6m).css('color','#17a2b8').css('font-weight','700');
+    }
+    if (review > 0) tds.eq(11).text(review.toLocaleString());
+    if (ext.wish > 0) tds.eq(10).text(ext.wish.toLocaleString());
   });
 }
 

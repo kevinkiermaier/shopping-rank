@@ -1,13 +1,34 @@
 from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 import requests
 import re
 import os
 import json
+import sqlite3
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
+
+EXT_DB = '/tmp/ext_cache.db' if os.environ.get('VERCEL') else 'ext_cache.db'
+
+def init_ext_db():
+    conn = sqlite3.connect(EXT_DB)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS ext_sessions (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword  TEXT,
+            products TEXT,
+            saved_at TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_ext_db()
 
 NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "")
 NAVER_CLIENT_SECRET = os.environ.get("NAVER_CLIENT_SECRET", "")
@@ -310,6 +331,38 @@ def search_naver_api(keyword, display=100):
             "grade": "GOOD",
         })
     return results
+
+
+@app.route('/api/analysis', methods=['POST'])
+def receive_ext():
+    data = request.get_json(force=True)
+    keyword = (data.get('keyword') or '').strip()
+    products = data.get('products', [])
+    if not products:
+        return jsonify({'error': 'no data'}), 400
+    conn = sqlite3.connect(EXT_DB)
+    conn.execute(
+        'INSERT INTO ext_sessions (keyword, products, saved_at) VALUES (?,?,?)',
+        (keyword, json.dumps(products), datetime.now().isoformat())
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'count': len(products)})
+
+
+@app.route('/api/analysis/latest', methods=['GET'])
+def latest_ext():
+    conn = sqlite3.connect(EXT_DB)
+    row = conn.execute(
+        'SELECT id, keyword, products, saved_at FROM ext_sessions ORDER BY id DESC LIMIT 1'
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({'session': None, 'products': []})
+    return jsonify({
+        'session': {'id': row[0], 'keyword': row[1], 'scraped_at': row[3]},
+        'products': json.loads(row[2])
+    })
 
 
 @app.route("/")
