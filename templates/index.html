@@ -290,10 +290,11 @@ function startPolling() {
 
 let currentItems = [];
 
-function fmt(n) {
-  if (n == null || n === '' || n === '-' || n === 0) return '-';
-  if (typeof n === 'string') return n;
-  return parseInt(n).toLocaleString();
+// 서버 포맷 문자열("15,000") 또는 숫자 모두 처리
+function parseNum(v) {
+  if (v == null || v === '' || v === '-') return 0;
+  if (typeof v === 'number') return v;
+  return parseInt(String(v).replace(/,/g, '')) || 0;
 }
 
 function renderTable(items, fromExt) {
@@ -314,11 +315,11 @@ function renderTable(items, fromExt) {
     const title  = item.title || '';
     const link   = item.url || item.link || '#';
     const cat    = item.category || '';
-    const price  = item.price || 0;
-    const rev    = parseInt(item.review) || 0;
-    const sales  = parseInt(item.sales_count) || 0;
-    const revenue= parseInt(item.revenue) || (price * sales);
-    const traffic= parseInt(item.est_traffic || item.actual_traffic) || 0;
+    const price  = parseNum(item.price);
+    const rev    = parseNum(item.review);
+    const sales  = parseNum(item.sales_count || item.sales_7d);
+    const revenue= parseNum(item.revenue) || (price * sales);
+    const traffic= parseNum(item.est_traffic || item.actual_traffic);
 
     const salesStr   = sales   > 0 ? sales.toLocaleString()   : '-';
     const revenueStr = revenue > 0 ? revenue.toLocaleString() : '-';
@@ -350,16 +351,17 @@ function downloadExcel() {
   const rows = currentItems.map(p => {
     const isAd = p.isAd || p.is_ad;
     if (!isAd) seq++;
-    const price = parseInt(p.price)||0, sales = parseInt(p.sales_count)||0;
+    const price = parseNum(p.price), sales = parseNum(p.sales_count || p.sales_7d);
+    const revenue = parseNum(p.revenue) || (price * sales);
     return [
       isAd ? 'AD' : seq,
       p.title || '',
       p.category || '',
       price || '',
-      p.revenue || (price*sales) || '',
+      revenue || '',
       sales || '',
-      parseInt(p.est_traffic||p.actual_traffic)||'',
-      parseInt(p.review)||'',
+      parseNum(p.est_traffic || p.actual_traffic) || '',
+      parseNum(p.review) || '',
     ];
   });
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
